@@ -46,8 +46,35 @@
 ;;p Now let's try this on the article you are currently reading. Clojure has a cool ability to detect the current file using "*file*".
 (require '[babashka.fs :as fs])
 
-(fs/create-dirs ".output")
-(spit ".output/index.html"
-      (str/join "\n" (map lp-line->HTML (str/split-lines (slurp *file*)))))
+(defn write-output []
+  (fs/create-dirs ".output")
+  (spit ".output/index.html"
+        (str/join "\n" (map lp-line->HTML (str/split-lines (slurp *file*))))))
 
-;;p I can open up the generated index.html see it works! But, well, you can't. Let's fix that! 
+;;p I can open up the generated index.html see it works! But, well, you can't. Let's fix that! I'll add image support and then display an image of the generated HTML page. I'll add image support and then display an image of the generated HTML page. I'll add image support and then display an image of the generated HTML page. I'll add image support and then display an image of the generated HTML page.
+
+;;h2 Adding Image Support
+;;p Img is not allowed to have a closing tag, and needs elements such as "src" and "description". Therefore we can't reuse our existing lp-line->HTML function. Let's just do the simplest solution. We'll just see if the line is an img, and if it is, place the contents (elements) of the line inside the tag like so
+
+(defn img [elements]
+  (str "<img " elements "/>"))
+
+;;p This can obviously be improved, but for now, this just lets us write "src" and "desc" in a literate programing comment the same way we would if handwriting html. So for example, this is how you would insert an image " ;;img src="http://cat-photos/cat_001.jpg" description="It's a cat" "
+;;p One last step! We need to now modify our lp-line->HTML function to allow us to insert images:
+
+(defn lp-line->HTML [line]
+  (let [tag-case (fn [prefix tag-gen]
+                   (when (str/starts-with? line prefix)
+                     (tag-gen (subs line (count prefix)))))]
+    (or (tag-case ";;p " p)
+        (tag-case ";;h1 " h1)
+        (tag-case ";;h2 " h2)
+        (tag-case ";;h3 " h3)
+        (tag-case ";;img " img)
+        line)))
+
+;;p And here's the HTML output, as promised!
+;;img src="/Users/georgeyeatman/clojure-literate-programming/1.png" description="A screenshot, showing the generated HTML page we have created so far"
+;;img src="https://marketplace.canva.com/xHPJk/MAHA8XxHPJk/1/tl/canva-MAHA8XxHPJk.jpg" description="It's a cat"
+
+(write-output)
