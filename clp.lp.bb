@@ -11,4 +11,38 @@
 ;;p Initially, I'm going to write the program to simply take in any Babashka file, and output HTML from this. The Babashka file can just be used as is.
 ;;p One thing I have been thinking about, is automatic file discovery. Do accomodate this, I've decided to name this file "clp.lp.bb". Eventually we can use the ".lp.bb", or ".lp.clj" file suffixes to mean that the Clojure code is literate.
 ;;h2 MVP 
-;;p First lets start by getting the basics working
+;;h3 HTML Gen
+;;p First lets start by getting the basics working. Let's start by writing some functions to generate basic HTML so we have something to use when we start to generate the output. We could use Hiccup for this, but lets keep the project dependency free for now.
+(ns clp.lp)
+
+(defn def-tag-gen
+  "We use this to generate tag generators. This is for writing output, not deciding what to generate."
+  [tag]
+  (fn [content] (str "<" tag ">" content "</" tag ">")))
+
+(def h1 (def-tag-gen "h1"))
+(def h2 (def-tag-gen "h2"))
+(def h3 (def-tag-gen "h3"))
+(def p (def-tag-gen "p"))
+
+;;p Using my REPL, I can test that (p "Hello, World!") produces "<p>Hello, World!</p>".
+;;p Cool! Now let's generate an HTML file of all the literate comments so far.
+;;h2 Read File and Output HTML Comments
+;;p First we shall slurp this file and go through line by line. When we detect that it starts with a comment tag, such as ";;p", let's remove the tag, wrap the rest of the line in an HTML tag, and spit it to the output HTML file.
+;;p Let's write a convenience function to detect convert each line into a tagged string:
+(require '[clojure.string :as str])
+
+(defn lp-line->HTML [line]
+  (let [tag-case (fn [prefix tag-gen]
+                   (when (str/starts-with? line prefix)
+                     (tag-gen (subs line (count prefix)))))]
+    (or (tag-case ";;p " p)
+        (tag-case ";;h1 " h1)
+        (tag-case ";;h2 " h2)
+        (tag-case ";;h3 " h3)
+        line)))
+
+;;p Nice! This this works as follows: (lp-line->HTML ";;p Abc, 123") => "<p>Abc, 123</p>"
+;;p Now let's try this on the article you are currently reading.
+
+(slurp *file*)
