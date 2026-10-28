@@ -46,9 +46,12 @@
 ;;p Now let's try this on the article you are currently reading. Clojure has a cool ability to detect the current file using "*file*".
 (require '[babashka.fs :as fs])
 
+(def output-dir ".output")
+(def output-html-file (str output-dir "/index.html"))
+
 (defn write-output []
-  (fs/create-dirs ".output")
-  (spit ".output/index.html"
+  (fs/create-dirs output-dir)
+  (spit output-html-file
         (str/join "\n" (map lp-line->HTML (str/split-lines (slurp *file*))))))
 
 ;;p I can open up the generated index.html see it works! But, well, you can't. Let's fix that! I'll add image support and then display an image of the generated HTML page. I'll add image support and then display an image of the generated HTML page. I'll add image support and then display an image of the generated HTML page. I'll add image support and then display an image of the generated HTML page.
@@ -75,6 +78,38 @@
 
 ;;p And here's the HTML output, as promised!
 ;;img src="/Users/georgeyeatman/clojure-literate-programming/1.png" description="A screenshot, showing the generated HTML page we have created so far"
-;;img src="https://marketplace.canva.com/xHPJk/MAHA8XxHPJk/1/tl/canva-MAHA8XxHPJk.jpg" description="It's a cat"
+;;h2 Clojure Code
+;;p This is fantasitic. Wonderful. Dare I say maginificent? However, there is a problem we haven't fixed yet that I hid with strategic cropping of the screenshot: 
+;;img src="/Users/georgeyeatman/clojure-literate-programming/2.png" description="A screenshot, showing that the Clojure code is just dumped into the HTML and doesn't display properly."
+;;p As you can see, the Clojure code that is outside of our literate programming comments doesn't read well. This is because, it's currently just input into the HTML file without any surrounding tags. What we need, is for our lp-line->HTML function to detect if it's a line of regular clojure, and if so, put it in a relevant tag. The best way to do this, would be to make the function modal, and wrap each block of Clojure in one div. However, for simplicity, let's just wrap each line of Clojure in it's own "cljLine" div:
+
+(defn clj-line [line]
+  (cond
+    (str/blank? line) ""
+    :else (str "<div class=\"cljLine\">" line "</div>")))
+
+;;p Now, replace the default behavour from lp-line->HTML with this function:
+
+(defn lp-line->HTML [line]
+  (let [tag-case (fn [prefix tag-gen]
+                   (when (str/starts-with? line prefix)
+                     (tag-gen (subs line (count prefix)))))]
+    (or (tag-case ";;p " p)
+        (tag-case ";;h1 " h1)
+        (tag-case ";;h2 " h2)
+        (tag-case ";;h3 " h3)
+        (tag-case ";;img " img)
+        (clj-line line))))
+
+;;p Now the output already looks much better!
+;;img src="/Users/georgeyeatman/clojure-literate-programming/3.png" description="The Clojure code now displays much better, however, indentation is incorrect."
+;;h3 Fixing Indentation
+;;p However, one issue is that the indentation is wrong. If we inspect the generated HTML, we will notice that the inentation is preserved in the HTML, but it is not displayed in the rendered page.
+;;img src="/Users/georgeyeatman/clojure-literate-programming/4.png" description="Image showing the preserved whitespace in the raw HTML file"
+;;p HTML doesn't preserve whitespace by default, so we'll have to fix this by adding a little bit of CSS to the end of our file 
+
+(spit output-html-file "\n<style> .cljLine { white-space: pre-wrap; } </style>\n" :append true)
+
+;;img src="/Users/georgeyeatman/clojure-literate-programming/5.png" description="Showing the improved indentation"
 
 (write-output)
