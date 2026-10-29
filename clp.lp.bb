@@ -81,12 +81,12 @@
 ;;h2 Clojure Code
 ;;p This is fantasitic. Wonderful. Dare I say maginificent? However, there is a problem we haven't fixed yet that I hid with strategic cropping of the screenshot: 
 ;;img src="/Users/georgeyeatman/clojure-literate-programming/2.png" description="A screenshot, showing that the Clojure code is just dumped into the HTML and doesn't display properly."
-;;p As you can see, the Clojure code that is outside of our literate programming comments doesn't read well. This is because, it's currently just input into the HTML file without any surrounding tags. What we need, is for our lp-line->HTML function to detect if it's a line of regular clojure, and if so, put it in a relevant tag. The best way to do this, would be to make the function modal, and wrap each block of Clojure in one div. However, for simplicity, let's just wrap each line of Clojure in it's own "cljLine" div:
+;;p As you can see, the Clojure code that is outside of our literate programming comments doesn't read well. This is because, it's currently just input into the HTML file without any surrounding tags. What we need, is for our lp-line->HTML function to detect if it's a line of regular clojure, and if so, put it in a relevant tag. The best way to do this, would be to make the function modal, and wrap each block of Clojure in one div. However, for simplicity, let's just wrap each line of Clojure in it's own "codeLine" div:
 
-(defn clj-line [line]
+(defn code-line [line]
   (cond
     (str/blank? line) ""
-    :else (str "<div class=\"cljLine\">" line "</div>")))
+    :else (str "<div class=\"codeLine\">" line "</div>")))
 
 ;;p Now, replace the default behavour from lp-line->HTML with this function:
 
@@ -99,17 +99,79 @@
         (tag-case ";;h2 " h2)
         (tag-case ";;h3 " h3)
         (tag-case ";;img " img)
-        (clj-line line))))
+        (code-line line))))
 
 ;;p Now the output already looks much better!
 ;;img src="/Users/georgeyeatman/clojure-literate-programming/3.png" description="The Clojure code now displays much better, however, indentation is incorrect."
 ;;h3 Fixing Indentation
 ;;p However, one issue is that the indentation is wrong. If we inspect the generated HTML, we will notice that the inentation is preserved in the HTML, but it is not displayed in the rendered page.
 ;;img src="/Users/georgeyeatman/clojure-literate-programming/4.png" description="Image showing the preserved whitespace in the raw HTML file"
-;;p HTML doesn't preserve whitespace by default, so we'll have to fix this by adding a little bit of CSS to the end of our file 
-
-(spit output-html-file "\n<style> .cljLine { white-space: pre-wrap; } </style>\n" :append true)
+;;p HTML doesn't preserve whitespace by default, so we'll have to fix this by adding a little bit of CSS ( .codeLine { white-space: pre-wrap; } )
 
 ;;img src="/Users/georgeyeatman/clojure-literate-programming/5.png" description="Showing the improved indentation"
+
+;;h2 Supporting Other Languages
+;;p I find Lisps such as Clojure fun, but (I (can (definitely (appreciate (why (other (people (don't)))))))). 
+;;p Luckily, it's very easy to add support for other languages, as the approach doesn't really change. As long as your language supports a way to comment out a line, we can add support by modifying our lp-line->HTML function to take in the syntax to comment out a line. Let's start by creating a Clojure specific lp-line->HTML function, before adding a new language.
+
+(defn lp-line->HTML [comment-line-syntax line]
+  (let [tag-case (fn [prefix tag-gen]
+                   (let [resolved-prefix (str comment-line-syntax prefix)]
+                     (when (str/starts-with? line resolved-prefix)
+                       (tag-gen (subs line (count resolved-prefix))))))]
+    (or (tag-case "p " p)
+        (tag-case "h1 " h1)
+        (tag-case "h2 " h2)
+        (tag-case "h3 " h3)
+        (tag-case "img " img)
+        (code-line line))))
+
+(def clj-lp-line->HTML (partial lp-line->HTML ";;"))
+
+;;p To test, we'll need to update our write-output function:
+
+(defn write-output []
+  (fs/create-dirs output-dir)
+  (spit output-html-file
+        (str/join "\n" (map clj-lp-line->HTML (str/split-lines (slurp *file*))))))
+
+;;p Now we can partially apply the lp-line->HTML function in one line! To demonstrate, let's add support for Go, C, Rust, and Haskell:
+(def go-lp-line->HTML (partial lp-line->HTML "//"))
+(def haskell-lp-line->HTML (partial lp-line->HTML "--"))
+(def rust-lp-line->HTML (partial lp-line->HTML "//"))
+(def c-lp-line->HTML (partial lp-line->HTML "//"))
+
+;;p Absolutely overkill, but we could shorten these definitions even more with a macro:
+(defn lp-file->HTML
+  [fn-lp-line->HTML input-file]
+  (->> (slurp input-file)
+       str/split-lines
+       (map fn-lp-line->HTML)
+       (str/join "\n")))
+
+(defn lp-file->HTML-file
+  [fn-lp-line->HTML input-file output-file]
+  (->> (lp-file->HTML fn-lp-line->HTML input-file)
+       (spit output-file)))
+
+(defmacro def-lp-lang [language comment-syntax]
+  (let [fn-lp-line->HTML (symbol (str language "-lp-line->HTML"))
+        fn-lp-file->HTML (symbol (str language "-lp-file->HTML"))
+        fn-lp-file->HTML-file (symbol (str fn-lp-file->HTML "-file"))]
+    `(do
+       (def ~fn-lp-line->HTML (partial lp-line->HTML ~comment-syntax))
+       (def ~fn-lp-file->HTML (partial lp-file->HTML ~fn-lp-line->HTML))
+       (def ~fn-lp-file->HTML-file (partial lp-file->HTML-file ~fn-lp-line->HTML)))))
+
+(def-lp-lang clj ";;") ;; Defines clj-lp-line->HTML
+(def-lp-lang c "//") ;; Defines c-lp-line->HTML
+(def-lp-lang go "//") ;; Defines go-lp-line->HTML
+(def-lp-lang haskell "--") ;; Defines haskell-lp-line->HTML
+(def-lp-lang lua "--") ;; Defines lua-lp-line->HTML
+(def-lp-lang rust "//") ;; Defines rust-lp-line->HTML
+
+(go-lp-file->HTML "go.lp.go" )
+(spit (str output-dir "/go.html")
+      (str/join "\n" (map go-lp-line->HTML (str/split-lines (slurp "go.lp.go")))))
 
 (write-output)
